@@ -1,34 +1,31 @@
 # goose-signal-gateway
 
-Read `~/Projects/standards.md` before any work on this project.
-
 ## What this is
 
-A Python service that bridges Signal Messenger to a running `goosed` via the Agent Client Protocol (ACP). Signal conversations become first-class Goose sessions, visible in both Signal and Goose Desktop.
+A Python service bridging Signal Messenger to Goose Desktop via the `goosed` REST/SSE API. Signal conversations become live Goose sessions.
 
-This is a standalone validation prototype — not an in-tree Goose contribution.
+This is a proof-of-concept prototype. Not an in-tree Goose contribution.
 
-## Implementation plan
+## Key findings (read before modifying)
 
-Full phased spec: `docs/PLAN.md`. Read the entire plan before writing any code.
+Full API contract: `docs/acp-findings.md`. Critical points:
 
-**Critical:** Phase 0.5 (verify ACP contract against a live goosed) must happen before Phase 5. Do not skip it.
+- goosed runs **HTTPS** with a self-signed cert. Always `verify=False`.
+- Auth header is `X-Secret-Key`, not `Authorization: Bearer`.
+- Port is dynamic per Goose Desktop launch. Discovered via `/proc` at startup.
+- New sessions need `POST /agent/update_provider` before they can reply.
+- signal-cli in daemon mode: use SSE at `GET /api/v1/events`. The `receive` JSON-RPC method does not work in daemon mode.
 
 ## Environment
 
-- Fedora. Use `dnf`, never `apt`.
-- Python 3.12+ managed with `uv`.
-- Goose Desktop is installed (provides goosed). Must be running for ACP testing.
-- `signal-cli` running at `127.0.0.1:8080` — already linked to the account on this machine.
-- Mistral API configured in Goose.
+- Linux (uses `/proc` for goosed discovery)
+- Python 3.12+ managed with `uv`
+- Goose Desktop must be running
+- signal-cli running as HTTP daemon at `127.0.0.1:8080`
 
-## Code location
+## Running
 
-`~/Projects/Personal/goose-signal-gateway/` — canonical.
-Git remote: to be created at `github.com/theronconrey/goose-signal-gateway`.
-
-## Context
-
-This project is part of a planned migration away from OpenClaw on borealis.home. OpenClaw currently handles the Signal channel, cron jobs, and daily briefings. Once this gateway is stable, those responsibilities move to Goose + this service.
-
-Migration is sequenced after METRC eval completion — do not deprecate OpenClaw until this is running and tested.
+```bash
+uv sync
+uv run main.py --account +1XXXXXXXXXX
+```

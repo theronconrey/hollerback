@@ -1,11 +1,10 @@
 [project]
 name = "goose-signal-gateway"
 version = "0.1.0"
-description = "Add your description here"
+description = "Bridge Signal Messenger to Goose Desktop via the goosed REST API"
 readme = "README.md"
-requires-python = ">=3.12,<4"
-# System has Python 3.14 — CLAUDE.md says 3.12+, 3.14 satisfies that
+requires-python = ">=3.12"
+license = { text = "MIT" }
 dependencies = [
-    "aiohttp>=3.13.5",
     "httpx>=0.28.1",
 ]
