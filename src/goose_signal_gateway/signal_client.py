@@ -1,0 +1,118 @@
+"""
+Client for signal-cli running as HTTP daemon at 127.0.0.1:8080.
+
+signal-cli daemon mode delivers inbound messages via SSE at GET /api/v1/events.
+Outbound messages use JSON-RPC 2.0 POST at /api/v1/rpc.
+
+NOTE: The JSON-RPC `receive` method does NOT work in daemon mode —
+signal-cli returns: "Receive command cannot be used if messages are already
+being received." Use subscribe() to stream events instead.
+"""
+
+import json
+import logging
+from dataclasses import dataclass
+from typing import AsyncIterator
+
+import httpx
+
+SIGNAL_CLI_BASE = "http://127.0.0.1:8080"
+SIGNAL_CLI_RPC = f"{SIGNAL_CLI_BASE}/api/v1/rpc"
+SIGNAL_CLI_EVENTS = f"{SIGNAL_CLI_BASE}/api/v1/events"
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class IncomingMessage:
+    sender: str       # phone number e.g. "+16125551234"
+    text: str
+    timestamp: int
+
+
+class SignalClient:
+    def __init__(self, account: str):
+        """
+        account: the Signal phone number this gateway is registered as.
+        """
+        self._account = account
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=None))
+        self._rpc_id = 0
+
+    def _next_id(self) -> int:
+        self._rpc_id += 1
+        return self._rpc_id
+
+    async def _rpc(self, method: str, params: dict) -> dict:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": method,
+            "params": params,
+        }
+        resp = await self._client.post(
+            SIGNAL_CLI_RPC,
+            content=json.dumps(payload),
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def send(self, recipient: str, message: str) -> None:
+        """Send a text message to a recipient phone number."""
+        result = await self._rpc(
+            "send",
+            {
+                "account": self._account,
+                "recipient": [recipient],
+                "message": message,
+            },
+        )
+        if "error" in result:
+            raise RuntimeError(f"signal-cli send error: {result['error']}")
+
+    async def subscribe(self) -> AsyncIterator[IncomingMessage]:
+        """
+        Subscribe to the SSE event stream and yield inbound text messages.
+
+        Connects to GET /api/v1/events and parses `event:receive` events.
+        Filters to only text messages (dataMessage with non-empty message body).
+        Skips receipts, typing indicators, and other envelope types.
+        """
+        async with self._client.stream("GET", SIGNAL_CLI_EVENTS) as resp:
+            resp.raise_for_status()
+            event_type = None
+            async for line in resp.aiter_lines():
+                if line.startswith("event:"):
+                    event_type = line[6:].strip()
+                elif line.startswith("data:"):
+                    if event_type != "receive":
+                        event_type = None
+                        continue
+                    try:
+                        payload = json.loads(line[5:].strip())
+                    except json.JSONDecodeError:
+                        event_type = None
+                        continue
+
+                    env = payload.get("envelope", {})
+                    data_msg = env.get("dataMessage", {})
+                    text = data_msg.get("message", "")
+                    sender = env.get("sourceNumber") or env.get("source", "")
+                    ts = env.get("timestamp", 0)
+
+                    if text and sender and sender != self._account:
+                        yield IncomingMessage(sender=sender, text=text, timestamp=ts)
+
+                    event_type = None
+                elif line == "":
+                    event_type = None
+
+    async def close(self):
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()

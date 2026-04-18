@@ -1,0 +1,11 @@
+[project]
+name = "goose-signal-gateway"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12,<4"
+# System has Python 3.14 — CLAUDE.md says 3.12+, 3.14 satisfies that
+dependencies = [
+    "aiohttp>=3.13.5",
+    "httpx>=0.28.1",
+]
