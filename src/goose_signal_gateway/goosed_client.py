@@ -7,8 +7,8 @@ Port and secret are read from the goosed process environment at startup.
 """
 
 import glob
+import json
 import os
-import ssl
 import time
 from dataclasses import dataclass
 from typing import AsyncIterator
@@ -117,12 +117,6 @@ def _find_listening_port(pid: str) -> int | None:
     return None
 
 
-# SSL context that skips verification (goosed uses self-signed cert)
-_SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
-
-
 class GoosedClient:
     def __init__(self, config: GoosedConfig):
         self._config = config
@@ -139,7 +133,7 @@ class GoosedClient:
 
     async def create_session(
         self,
-        working_dir: str = "/home/theron",
+        working_dir: str | None = None,
         provider: str = "mistral",
         model: str = "mistral-medium",
     ) -> str:
@@ -151,7 +145,8 @@ class GoosedClient:
         POST /agent/update_provider must be called after creation.
         """
         resp = await self._client.post(
-            "/agent/start", json={"working_dir": working_dir}
+            "/agent/start",
+            json={"working_dir": working_dir or os.path.expanduser("~")},
         )
         resp.raise_for_status()
         session_id = resp.json()["id"]
@@ -181,7 +176,6 @@ class GoosedClient:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if line.startswith("data: "):
-                    import json
                     yield json.loads(line[6:])
 
     async def close(self):

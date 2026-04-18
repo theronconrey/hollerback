@@ -64,7 +64,7 @@ body: "ok"
 ### `POST /agent/start` — create a new session
 Request body:
 ```json
-{ "working_dir": "/home/theron" }
+{ "working_dir": "/home/youruser" }
 ```
 Returns the full session object. Key field: `"id"` (e.g. `"20260418_5"`).
 

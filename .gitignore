@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Secrets
+.env
+*.secret
+*.key
+
+# Logs
+*.log
+/tmp/
