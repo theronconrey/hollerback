@@ -16,7 +16,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from .config import DEFAULT_CONFIG_PATH, Config, load_config, save_config
+from .config import DEFAULT_CONFIG_PATH, AgentEntry, Config, load_config, save_config
 
 console = Console()
 err_console = Console(stderr=True)
@@ -96,9 +96,11 @@ def start(ctx, account, detach, log_level):
         allowed_users=cfg.access.allowed_users or None,
         code_ttl_minutes=cfg.pairing.code_ttl_minutes,
         home_conversation=cfg.home_conversation,
+        acp_enabled=cfg.acp.enabled,
         mcp_enabled=cfg.mcp.enabled,
+        mcp_host=cfg.mcp.host,
         mcp_port=cfg.mcp.port,
-        mcp_secret=cfg.mcp.secret,
+        mcp_agents=cfg.mcp.agents,
     )
 
     loop = asyncio.new_event_loop()
@@ -561,7 +563,7 @@ def setup(ctx):
     cfg.access.dm_policy = policy
     cfg.access.allowed_users = allowed
     cfg.home_conversation = home
-    cfg.mcp.secret = secrets.token_urlsafe(32)
+    cfg.mcp.agents = [AgentEntry(name="default", key=secrets.token_urlsafe(32))]
 
     if config_path.exists():
         if not click.confirm(f"\nOverwrite existing config at {config_path}?"):
@@ -582,8 +584,18 @@ def setup(ctx):
                       "start it before running goose-signal start")
 
     console.print("\n[bold]Setup complete.[/bold]")
-    console.print(f"\n[bold]MCP secret[/bold] (use as X-Gateway-Key header in your MCP client):")
-    console.print(f"    [yellow]{cfg.mcp.secret}[/yellow]")
+    mcp_url = f"http://{cfg.mcp.host}:{cfg.mcp.port}/mcp"
+    first_key = cfg.mcp.agents[0].key if cfg.mcp.agents else ""
+    console.print(f"\n[bold]MCP agent key (\"default\")[/bold]:")
+    console.print(f"    [yellow]{first_key}[/yellow]")
+    console.print("\n[bold]Claude CLI setup:[/bold]")
+    console.print(f'    claude mcp add signal-gateway {mcp_url} \\')
+    console.print(f'      --header "Authorization: Bearer {first_key}"')
+    console.print("\n[bold]Goose Desktop setup:[/bold]")
+    console.print("    Extensions → Add custom extension → HTTP")
+    console.print(f"    Endpoint: {mcp_url}")
+    console.print(f'    Request Headers: Authorization: Bearer {first_key}')
+    console.print("\n[dim]To add more agents (party line), add entries under mcp.agents in config.[/dim]")
     console.print("\nStart the gateway:")
     console.print("    goose-signal start               [dim](foreground)[/dim]")
     console.print("    goose-signal start --detach      [dim](systemd user unit)[/dim]")

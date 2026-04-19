@@ -53,8 +53,12 @@ def discover_goosed() -> GoosedConfig:
                 continue
             secret = secret_bytes.decode()
 
-            # Find the listening port via /proc/<pid>/net/tcp6
-            port = _find_listening_port(pid)
+            # Prefer GOOSE_PORT env var; fall back to socket scanning
+            port_bytes = env.get(b"GOOSE_PORT")
+            if port_bytes:
+                port = int(port_bytes.decode())
+            else:
+                port = _find_listening_port(pid)
             if port is None:
                 continue
 

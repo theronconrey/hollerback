@@ -146,9 +146,18 @@ Once approved, the sender can converse with Goose — and Goose can message them
 
 ---
 
-## Goose Desktop Extension
+## Connecting an MCP client
 
-Once the gateway is running, register it in Goose Desktop:
+The setup wizard prints ready-to-paste connection instructions. The auth header is `Authorization: Bearer <agent_key>` for all clients.
+
+### Claude CLI
+
+```bash
+claude mcp add signal-gateway http://127.0.0.1:7322/mcp \
+  --header "Authorization: Bearer <agent_key>"
+```
+
+### Goose Desktop Extension
 
 1. Select **Extensions** in the left column
 2. Click **Add custom extension**
@@ -161,20 +170,27 @@ Once the gateway is running, register it in Goose Desktop:
 | Extension Name | `Signal MCP` |
 | Type | `Streamable HTTP` *(change from the default STDIO)* |
 | Endpoint | `http://127.0.0.1:7322/mcp` |
-| Header name | `X-Gateway-Key` |
-| Header value | *(your MCP secret — printed by `goose-signal setup`)* |
+| Header name | `Authorization` |
+| Header value | `Bearer <agent_key>` *(printed by `goose-signal setup`)* |
 
 4. Click **Add Extension**
+
+### Multi-agent (party line)
+
+Add multiple entries under `mcp.agents` in `config.yaml` — each agent gets its own named key. `get_signal_identity` returns `"mode": "multi"` when more than one agent is configured.
 
 ### Available tools
 
 | Tool | Description |
 |------|-------------|
-| `get_signal_identity` | Returns the Signal account number the gateway is running as |
-| `list_signal_contacts` | Lists contacts with active sessions (numbers Goose can message) |
+| `get_signal_identity` | Returns the Signal account, mode (`single`/`multi`), and whether goosed is connected |
+| `list_signal_contacts` | Lists contacts with active sessions (numbers any agent can message) |
 | `send_signal_message(phone_number, message)` | Sends a Signal message to a known contact |
+| `get_messages(phone_number?, since?)` | Returns buffered inbound messages; optionally filter by sender or timestamp (ms) |
 
 **Contact gating:** a phone number must initiate a conversation through the gateway (passing the pairing flow) before the agent can message them. The agent cannot cold-call arbitrary numbers.
+
+**Buffer note:** `get_messages` reads from an in-memory buffer (500 messages per contact). The buffer resets on gateway restart — it is not persisted to disk.
 
 ---
 
@@ -182,7 +198,7 @@ Once the gateway is running, register it in Goose Desktop:
 
 - **Pairing is the default for a reason.** `open` DM policy gives anyone with your bot number shell-level access via Goose tool use.
 - **Tool approval routes to Signal.** When Goose wants to run a shell command, the gateway sends a yes/no prompt to Signal. You must reply before it proceeds.
-- **MCP auth is a shared secret.** The `gateway_secret` in `config.yaml` grants full Signal send access. Treat it like a password.
+- **MCP auth uses per-agent keys.** Each entry under `mcp.agents` in `config.yaml` grants full Signal send access. Treat each key like a password.
 - **The gateway has shell access.** Treat `~/.config/goose-signal-gateway/config.yaml` like root credentials.
 - **signal-cli key material** is at `~/.local/share/signal-cli` — mode `0700`. Do not expose it.
 
@@ -193,7 +209,7 @@ Once the gateway is running, register it in Goose Desktop:
 - **Linux only** — goosed discovery reads `/proc`; macOS/Windows not supported.
 - **Desktop session sidebar** — gateway sessions appear in Goose Desktop's sidebar only after a Desktop restart (`loadSessions()` runs at startup; there is no push notification for externally-created sessions). Upstream fix needed: a `sessionCreated` WebSocket event from goosed.
 - **Desktop real-time message updates** — when the gateway injects a message into an already-open session via `POST /reply`, the Desktop UI does not refresh to show the new exchange. goosed does not broadcast session writes to existing UI subscribers. Workaround: close and reopen the session in Desktop to reload the full history. Upstream fix needed: a `sessionUpdated` WebSocket event (or shared SSE broadcast) from goosed.
-- **goosed port changes on restart** — goosed binds to a random port each time Goose Desktop starts. The gateway auto-reconnects on the next inbound Signal message, but any messages received while goosed is down are lost.
+- **goosed port changes on restart** — goosed binds to a random port each time Goose Desktop starts. The gateway polls for reconnection every 30 seconds and prefers the `GOOSE_PORT` env var when set. Messages received while goosed is down are buffered and available via `get_messages`; automatic replies are held until reconnection.
 - **No session history replay** — goosed v1.30.0 has no history endpoint; restarting the gateway starts fresh sessions.
 - **No `resolve_permission` via ACP** — the tool-approval flow sends a Signal prompt but the ACP handshake cannot complete (goosed v1.30.0 limitation).
 - **One session per sender** — no threads or topics within a DM conversation.
@@ -212,8 +228,9 @@ src/goose_signal_gateway/
 ├── config.py          # config model + YAML load/save
 ├── dedup.py           # message deduplication
 ├── gateway.py         # main loop: receive → session → stream → reply
-├── goosed_client.py   # goosed process discovery (/proc)
-├── mcp_server.py      # MCP HTTP server (signal tools)
+├── goosed_client.py   # goosed process discovery (/proc + GOOSE_PORT env)
+├── message_buffer.py  # in-memory per-contact message buffer (500 msg cap)
+├── mcp_server.py      # MCP HTTP server (signal tools, per-agent Bearer auth)
 ├── pairing.py         # sender pairing handshake
 ├── session_map.py     # persistent Signal conversation → session_id map
 └── signal_client.py   # signal-cli HTTP client (send, typing, receipts, SSE)

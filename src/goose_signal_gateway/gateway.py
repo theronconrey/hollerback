@@ -18,6 +18,7 @@ from .pairing import (
     PAIRING_MESSAGE_TEMPLATE,
     PairingStore,
 )
+from .message_buffer import MessageBuffer
 from .session_map import ConversationKey, SessionMap
 from .signal_client import IncomingMessage, SignalClient
 
@@ -40,8 +41,10 @@ class Gateway:
         code_ttl_minutes: int = 60,
         home_conversation: str | None = None,
         mcp_enabled: bool = False,
+        mcp_host: str = "127.0.0.1",
         mcp_port: int = 7322,
-        mcp_secret: str = "",
+        mcp_agents: list = [],
+        acp_enabled: bool = True,
     ):
         self._signal_account = signal_account
         self._session_map_path = session_map_path
@@ -59,13 +62,16 @@ class Gateway:
         self._sessions: SessionMap | None = None
         self._conv_locks: dict[str, asyncio.Lock] = {}
         self._dedup = MessageDeduplicator()
+        self._buffer = MessageBuffer()
         self._acp: AcpClient | None = None
         self._signal: SignalClient | None = None
         self._approvals: ApprovalCoordinator | None = None
 
         self._mcp_enabled = mcp_enabled
+        self._mcp_host = mcp_host
         self._mcp_port = mcp_port
-        self._mcp_secret = mcp_secret
+        self._mcp_agents = mcp_agents
+        self._acp_enabled = acp_enabled
 
         self._tasks: set[asyncio.Task] = set()
         self._accepting = True
@@ -73,19 +79,30 @@ class Gateway:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self):
-        config = discover_goosed()
-        log.info("Found goosed at port %d", config.port)
-
-        self._acp = AcpClient(config)
         self._signal = SignalClient(self._signal_account)
         self._sessions = await SessionMap.load(self._session_map_path)
-        self._approvals = ApprovalCoordinator(self._signal, self._acp)
 
-        await self._acp.initialize()
-        log.info("goosed healthy")
+        if self._acp_enabled:
+            try:
+                config = discover_goosed()
+                log.info("Found goosed at port %d", config.port)
+                self._acp = AcpClient(config)
+                await self._acp.initialize()
+                self._approvals = ApprovalCoordinator(self._signal, self._acp)
+                log.info("goosed healthy")
+            except Exception as e:
+                log.warning("goosed not available: %s — running without ACP", e)
+                self._acp = None
+                self._approvals = None
+        else:
+            log.warning("ACP disabled by config — running without goosed")
+            self._acp = None
+            self._approvals = None
+
+        asyncio.create_task(self._goosed_reconnect_loop())
 
         if self._mcp_enabled:
-            asyncio.create_task(self._run_mcp())
+            asyncio.create_task(self._run_mcp(self._mcp_agents))
             log.info("MCP server starting on port %d", self._mcp_port)
 
         if self._home_conversation:
@@ -121,20 +138,22 @@ class Gateway:
 
     # ── MCP server ───────────────────────────────────────────────────────────
 
-    async def _run_mcp(self):
+    async def _run_mcp(self, agents: list):
         import uvicorn
         from .mcp_server import build_mcp_server
         mcp = build_mcp_server(
             signal_account=self._signal_account,
             session_map=self._sessions,
             signal_client=self._signal,
-            secret=self._mcp_secret,
+            message_buffer=self._buffer,
+            agents=[(a.name, a.key) for a in agents],
+            host=self._mcp_host,
             port=self._mcp_port,
+            goosed_connected=(self._acp is not None),
         )
-        asgi_app = getattr(mcp, "_auth_wrapped", mcp.streamable_http_app())
         config = uvicorn.Config(
-            asgi_app,
-            host="127.0.0.1",
+            mcp.streamable_http_app(),
+            host=self._mcp_host,
             port=self._mcp_port,
             log_level="warning",
         )
@@ -142,6 +161,14 @@ class Gateway:
         await server.serve()
 
     # ── goosed reconnection ───────────────────────────────────────────────────
+
+    async def _goosed_reconnect_loop(self):
+        while True:
+            await asyncio.sleep(30)
+            if self._acp is None and self._acp_enabled:
+                success = await self._reconnect_acp()
+                if success:
+                    self._approvals = ApprovalCoordinator(self._signal, self._acp)
 
     async def _reconnect_acp(self) -> bool:
         """Re-discover goosed and reconnect. Returns True on success."""
@@ -208,7 +235,12 @@ class Gateway:
             await self._signal.send(sender, reply)
             return
 
+        await self._buffer.append(sender, text, msg.timestamp)
         await self._signal.send_read_receipt(sender, [msg.timestamp])
+
+        if self._acp is None:
+            log.info("goosed offline — buffered message from %s, no auto-reply", sender)
+            return
 
         async with self._conv_lock(key):
             try:

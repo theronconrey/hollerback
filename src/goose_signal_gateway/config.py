@@ -24,7 +24,14 @@ class DaemonConfig:
 
 
 @dataclass
+class AgentEntry:
+    name: str
+    key: str
+
+
+@dataclass
 class AcpConfig:
+    enabled: bool = True
     url: str | None = None           # None = auto-discover via /proc
     manage_goosed: bool = False
 
@@ -62,8 +69,9 @@ class StreamConfig:
 @dataclass
 class McpConfig:
     enabled: bool = True
+    host: str = "127.0.0.1"
     port: int = 7322
-    secret: str = ""
+    agents: list[AgentEntry] = field(default_factory=list)
 
 
 @dataclass
@@ -97,9 +105,18 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     st = raw.get("stream", {})
     mc = raw.get("mcp", {})
 
+    agents_raw = mc.get("agents", [])
+    if agents_raw:
+        agents = [AgentEntry(name=e["name"], key=e["key"]) for e in agents_raw]
+    elif mc.get("secret"):
+        agents = [AgentEntry(name="default", key=mc["secret"])]
+    else:
+        agents = []
+
     return Config(
         daemon=DaemonConfig(account=d.get("account", "")),
         acp=AcpConfig(
+            enabled=a.get("enabled", True),
             url=a.get("url"),
             manage_goosed=a.get("manage_goosed", False),
         ),
@@ -125,8 +142,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         ),
         mcp=McpConfig(
             enabled=mc.get("enabled", True),
+            host=mc.get("host", "127.0.0.1"),
             port=mc.get("port", 7322),
-            secret=mc.get("secret", ""),
+            agents=agents,
         ),
         home_conversation=raw.get("home_conversation"),
     )
@@ -137,6 +155,7 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
     raw = {
         "daemon": {"account": config.daemon.account},
         "acp": {
+            "enabled": config.acp.enabled,
             "url": config.acp.url,
             "manage_goosed": config.acp.manage_goosed,
         },
@@ -160,8 +179,9 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         },
         "mcp": {
             "enabled": config.mcp.enabled,
+            "host": config.mcp.host,
             "port": config.mcp.port,
-            "secret": config.mcp.secret,
+            "agents": [{"name": e.name, "key": e.key} for e in config.mcp.agents],
         },
         "home_conversation": config.home_conversation,
     }

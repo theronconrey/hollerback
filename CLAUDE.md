@@ -1,31 +1,45 @@
-# goose-signal-gateway
+# signal-mcp
 
 ## What this is
 
-A Python service bridging Signal Messenger to Goose Desktop via the `goosed` REST/SSE API. Signal conversations become live Goose sessions.
+A Python service bridging Signal Messenger to AI agents via MCP. Signal conversations become live goosed sessions (when goosed is available); any MCP client (Claude CLI, Goose Desktop, Cursor, etc.) can also send messages and read inbound messages directly via the MCP tools.
 
-This is a proof-of-concept prototype. Not an in-tree Goose contribution.
+This is a proof-of-concept prototype.
 
 ## Key findings (read before modifying)
 
-Full API contract: `docs/acp-findings.md`. Critical points:
+Full goosed API contract: `docs/acp-findings.md`. Critical points:
 
 - goosed runs **HTTPS** with a self-signed cert. Always `verify=False`.
 - Auth header is `X-Secret-Key`, not `Authorization: Bearer`.
-- Port is dynamic per Goose Desktop launch. Discovered via `/proc` at startup.
+- Port is dynamic per Goose Desktop launch. Discovered via `GOOSE_PORT` env var (preferred) or `/proc` socket scan fallback.
 - New sessions need `POST /agent/update_provider` before they can reply.
 - signal-cli in daemon mode: use SSE at `GET /api/v1/events`. The `receive` JSON-RPC method does not work in daemon mode.
 
+## MCP auth
+
+Auth header is `Authorization: Bearer <agent_key>` (not `X-Gateway-Key` — that was the old scheme). Keys are per-agent entries under `mcp.agents` in `config.yaml`. Backwards-compatible: a legacy `mcp.secret` field is migrated to a single `default` agent on load.
+
+## Graceful degradation
+
+The gateway starts and operates without goosed. When goosed is unavailable:
+- Inbound messages are buffered in `MessageBuffer` (in-memory, 500 msg/contact cap).
+- `get_messages` MCP tool returns buffered messages.
+- Auto-replies to Signal are held until goosed reconnects.
+- `_goosed_reconnect_loop` polls every 30 seconds and wires up `ApprovalCoordinator` automatically on reconnect.
+
 ## Environment
 
-- Linux (uses `/proc` for goosed discovery)
+- Linux (uses `/proc` for goosed discovery fallback)
 - Python 3.12+ managed with `uv`
-- Goose Desktop must be running
 - signal-cli running as HTTP daemon at `127.0.0.1:8080`
+- Goose Desktop optional (gateway runs without it)
 
 ## Running
 
 ```bash
 uv sync
-uv run main.py --account +1XXXXXXXXXX
+uv run goose-signal setup   # first time
+uv run goose-signal start   # foreground
+uv run goose-signal start --detach   # systemd user unit
 ```
