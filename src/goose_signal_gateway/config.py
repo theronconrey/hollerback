@@ -60,6 +60,13 @@ class StreamConfig:
 
 
 @dataclass
+class McpConfig:
+    enabled: bool = True
+    port: int = 7322
+    secret: str = ""
+
+
+@dataclass
 class Config:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     acp: AcpConfig = field(default_factory=AcpConfig)
@@ -68,6 +75,7 @@ class Config:
     sessions: SessionsConfig = field(default_factory=SessionsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     stream: StreamConfig = field(default_factory=StreamConfig)
+    mcp: McpConfig = field(default_factory=McpConfig)
     home_conversation: str | None = None
 
 
@@ -87,6 +95,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     s = raw.get("sessions", {})
     lo = raw.get("logging", {})
     st = raw.get("stream", {})
+    mc = raw.get("mcp", {})
 
     return Config(
         daemon=DaemonConfig(account=d.get("account", "")),
@@ -113,6 +122,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         stream=StreamConfig(
             edit_interval_ms=st.get("edit_interval_ms", 500),
             edit_char_threshold=st.get("edit_char_threshold", 80),
+        ),
+        mcp=McpConfig(
+            enabled=mc.get("enabled", True),
+            port=mc.get("port", 7322),
+            secret=mc.get("secret", ""),
         ),
         home_conversation=raw.get("home_conversation"),
     )
@@ -143,6 +157,11 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "stream": {
             "edit_interval_ms": config.stream.edit_interval_ms,
             "edit_char_threshold": config.stream.edit_char_threshold,
+        },
+        "mcp": {
+            "enabled": config.mcp.enabled,
+            "port": config.mcp.port,
+            "secret": config.mcp.secret,
         },
         "home_conversation": config.home_conversation,
     }

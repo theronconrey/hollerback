@@ -39,6 +39,9 @@ class Gateway:
         allowed_users: list[str] | None = None,
         code_ttl_minutes: int = 60,
         home_conversation: str | None = None,
+        mcp_enabled: bool = False,
+        mcp_port: int = 7322,
+        mcp_secret: str = "",
     ):
         self._signal_account = signal_account
         self._session_map_path = session_map_path
@@ -60,6 +63,10 @@ class Gateway:
         self._signal: SignalClient | None = None
         self._approvals: ApprovalCoordinator | None = None
 
+        self._mcp_enabled = mcp_enabled
+        self._mcp_port = mcp_port
+        self._mcp_secret = mcp_secret
+
         self._tasks: set[asyncio.Task] = set()
         self._accepting = True
 
@@ -76,6 +83,10 @@ class Gateway:
 
         await self._acp.initialize()
         log.info("goosed healthy")
+
+        if self._mcp_enabled:
+            asyncio.create_task(self._run_mcp())
+            log.info("MCP server starting on port %d", self._mcp_port)
 
         if self._home_conversation:
             try:
@@ -107,6 +118,28 @@ class Gateway:
             await self._acp.close()
         if self._signal:
             await self._signal.close()
+
+    # ── MCP server ───────────────────────────────────────────────────────────
+
+    async def _run_mcp(self):
+        import uvicorn
+        from .mcp_server import build_mcp_server
+        mcp = build_mcp_server(
+            signal_account=self._signal_account,
+            session_map=self._sessions,
+            signal_client=self._signal,
+            secret=self._mcp_secret,
+            port=self._mcp_port,
+        )
+        asgi_app = getattr(mcp, "_auth_wrapped", mcp.streamable_http_app())
+        config = uvicorn.Config(
+            asgi_app,
+            host="127.0.0.1",
+            port=self._mcp_port,
+            log_level="warning",
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
 
     # ── main loop ─────────────────────────────────────────────────────────────
 
