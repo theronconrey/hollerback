@@ -154,7 +154,7 @@ Once the gateway is running, register it in Goose Desktop:
 2. Click **Add custom extension**
 3. Fill in the fields as follows:
 
-![Add custom extension dialog](docs/goose-add-extension.png)
+<img src="docs/goose-add-extension.png" width="50%"/>
 
 | Field | Value |
 |-------|-------|
