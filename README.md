@@ -87,15 +87,15 @@ uv sync
 
 Complete these steps once, in order.
 
-**1. Link a Signal account to signal-cli**
+**1. Register a dedicated Signal number with signal-cli**
 
-You need a dedicated Signal number for the bot (a second number, SIM, or VoIP number).
+The gateway needs its own phone number — a SIM, second number, or VoIP number (e.g. Google Voice). This is separate from your personal Signal account.
 
 ```bash
-signal-cli link -n "signal-mcp" | qrencode -t ansiutf8
+signal-cli --account +1XXXXXXXXXX register
+# Signal sends an SMS verification code to that number
+signal-cli --account +1XXXXXXXXXX verify <code>
 ```
-
-On your phone: **Settings → Linked devices → Link new device** → scan the QR code.
 
 **2. Start the signal-cli daemon**
 
