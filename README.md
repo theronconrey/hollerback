@@ -188,7 +188,7 @@ Once the gateway is running, register it in Goose Desktop:
 
 ---
 
-## Known limitations
+## Current limitations
 
 - **Linux only** — goosed discovery reads `/proc`; macOS/Windows not supported.
 - **Desktop session sidebar** — gateway sessions appear in Goose Desktop's sidebar only after a Desktop restart (`loadSessions()` runs at startup; there is no push notification for externally-created sessions). Upstream fix needed: a `sessionCreated` WebSocket event from goosed.
