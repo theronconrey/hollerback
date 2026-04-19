@@ -8,6 +8,7 @@ license = { text = "MIT" }
 dependencies = [
     "click>=8.3.2",
     "httpx>=0.28.1",
+    "mcp>=1.27.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
 ]
