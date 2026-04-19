@@ -27,11 +27,18 @@ Signal (phone)
 signal-cli daemon (HTTP, 127.0.0.1:8080)
       │  SSE event stream
       ▼
-signal-mcp                        ← this repo
-      │  ├─ REST + SSE (goosed API)        inbound path
-      │  └─ MCP server (port 7322)         outbound path
+signal-mcp                          ← this repo
+      │  ├─ REST + SSE (goosed API)          inbound path
+      │  └─ MCP server (port 7322)           outbound path
+      │            │
+      │            ├──────────────────► Goose Desktop
+      │            │                    └─ goosed ──► Mistral / OpenAI / etc.
+      │            │
+      │            └──────────────────► Claude CLI
+      │                                 └─ claude ──► Claude (Anthropic)
+      │
       ▼
-goosed  ──────────────────────► Mistral / OpenAI / etc.
+Signal (phone)   ◄── replies via signal-cli
 ```
 
 ---
