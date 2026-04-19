@@ -96,6 +96,9 @@ def start(ctx, account, detach, log_level):
         allowed_users=cfg.access.allowed_users or None,
         code_ttl_minutes=cfg.pairing.code_ttl_minutes,
         home_conversation=cfg.home_conversation,
+        mcp_enabled=cfg.mcp.enabled,
+        mcp_port=cfg.mcp.port,
+        mcp_secret=cfg.mcp.secret,
     )
 
     loop = asyncio.new_event_loop()
