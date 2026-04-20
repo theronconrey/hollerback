@@ -17,3 +17,6 @@ wheels/
 # Logs
 *.log
 /tmp/
+
+# Local-only docs
+docs/PLAN.md
