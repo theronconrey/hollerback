@@ -1,6 +1,6 @@
 # Handoff Report
 
-**Date:** 2026-04-19  
+**Date:** 2026-04-20  
 **goosed version:** v1.30.0 (Goose Desktop, Fedora)  
 **signal-cli version:** 0.14.2  
 **Repo:** theronconrey/hollerback
@@ -27,6 +27,8 @@
 | 10 — Documentation | ✅ Complete | README rewritten to reflect hollerback direction |
 | 11 — End-to-end smoke test | ✅ Complete | Tested live; read receipts, replies, MCP tools all verified |
 | 12 — MCP server | ✅ Complete | `mcp_server.py` — bidirectional Signal via MCP |
+| 13 — PyPI publish | ✅ Complete | `hollerback 0.1.0` on PyPI; `uv tool install hollerback` |
+| 14 — Security hardening | ✅ Complete | 9 fixes from external review; see security section below |
 
 ---
 
@@ -42,8 +44,10 @@
   - `get_signal_identity` — returns gateway Signal number
   - `list_signal_contacts` — lists contacts with active sessions
   - `send_signal_message` — sends Signal message from any MCP client
-- Auth: `X-Gateway-Key` header validated against `gateway_secret` in config
-- systemd user service, enabled and running
+- Auth: per-agent Bearer tokens under `mcp.agents` in config; `secrets.compare_digest`
+- systemd user service (`hollerback.service`), enabled and running
+- Published to PyPI as `hollerback 0.1.0`; installable via `uv tool install hollerback`
+- Agent key written to `~/.config/hollerback/agent-keys/default.key` (mode 0600) at setup
 
 ---
 
@@ -87,9 +91,27 @@ Gateway assumes goosed is already running. Auto-spawning goosed as a child proce
 
 ---
 
+## Security fixes applied (2026-04-20)
+
+From external review — all addressed:
+
+| # | Fix |
+|---|-----|
+| 1 | `supports_edit` uninitialized — added to `SignalClient.__init__` |
+| 2 | SSE idle timeout — 120s no-data forces reconnect |
+| 3 | Pairing code alphabet — unambiguous chars only (no `-_0OILS1`) |
+| 4 | `PairingStore.ttl_minutes` property — removed private `_ttl` access in gateway |
+| 5 | Mutable default `mcp_agents=[]` — changed to `None` with `or []` guard |
+| 6 | `/proc` goosed discovery — basename match + UID ownership check |
+| 7 | Agent key no longer printed to terminal — written to `agent-keys/` file instead |
+| 8 | `mcp_server.py` auth tests — 6 cases covering wrong/right/prefix/multi-agent |
+| 9 | `verify=False` on goosed HTTPS — acceptable (localhost only); documented |
+
+---
+
 ## Next steps
 
-1. File the three upstream issues against `block/goose`
-2. Add `gateway_secret` generation to the `hollerback setup` wizard (currently requires manual config edit)
-3. Phase 7c — Desktop → Signal forwarding (blocked on upstream session visibility fix)
-4. Consider publishing to PyPI once setup wizard handles MCP config automatically
+1. Share `docs/UPSTREAM_ASKS.md` with goose maintainers / AAIF Discord
+2. Phase 7c — Desktop → Signal forwarding (blocked on upstream session visibility fix)
+3. Persist inbound message buffer across restarts
+4. Per-agent scoping and audit log
