@@ -34,7 +34,7 @@ The server uses the MCP streamable-HTTP transport. Every session requires a two-
 | `get_signal_identity` | Gateway account number, mode, goosed status |
 | `list_signal_contacts` | Active paired contacts — the valid recipients for `send_signal_message` |
 | `get_messages` | Buffered inbound messages; filter by `phone_number` or `since` (ms timestamp) |
-| `send_signal_message` | Send to a paired contact or the `home_conversation` number |
+| `send_signal_message` | Send to a paired contact (must appear in `list_signal_contacts`) |
 
 **Sending to the owner:** The gateway's own Signal account is `daemon.account` in `config.yaml` — that is the *gateway's* number, not the owner's. The owner's number appears in `list_signal_contacts` after they pair. Always call `list_signal_contacts` first to find valid recipients.
 

@@ -21,10 +21,28 @@ import logging
 import secrets as _secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import NotRequired, TypedDict
 
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+
+
+class Contact(TypedDict):
+    phone_number: str
+    kind: str
+    session_id: str
+
+
+class Message(TypedDict):
+    phone_number: str
+    text: str
+    timestamp: int
+
+
+class SendResult(TypedDict):
+    success: bool
+    error: NotRequired[str]
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +121,7 @@ def build_mcp_server(
         }
 
     @mcp.tool()
-    async def list_signal_contacts() -> list[dict]:
+    async def list_signal_contacts() -> list[Contact]:
         """
         List humans who have paired with this gateway and can receive messages.
 
@@ -123,7 +141,7 @@ def build_mcp_server(
         ]
 
     @mcp.tool()
-    async def get_messages(phone_number: str | None = None, since: int = 0) -> list[dict]:
+    async def get_messages(phone_number: str | None = None, since: int = 0) -> list[Message]:
         """
         Retrieve messages received from Signal contacts.
 
@@ -134,7 +152,7 @@ def build_mcp_server(
         return await message_buffer.get(phone_number=phone_number, since=since)
 
     @mcp.tool()
-    async def send_signal_message(phone_number: str, message: str) -> dict:
+    async def send_signal_message(phone_number: str, message: str) -> SendResult:
         """
         Send a Signal message to a paired contact.
 
