@@ -258,6 +258,11 @@ class Gateway:
         sender = key.identifier
 
         session_id = await self._sessions.get(key)
+        if session_id is not None and not await self._acp.session_exists(session_id):
+            log.warning("Session %s for %s no longer exists in goosed — creating new session", session_id, sender)
+            await self._sessions.delete(key)
+            session_id = None
+
         if session_id is None:
             session_id = await self._acp.session_new(
                 cwd=str(Path.home()),

@@ -28,6 +28,12 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 
+class Identity(TypedDict):
+    account: str
+    mode: str
+    goosed_connected: bool
+
+
 class Contact(TypedDict):
     phone_number: str
     kind: str
@@ -107,7 +113,7 @@ def build_mcp_server(
     )
 
     @mcp.tool()
-    async def get_signal_identity() -> dict:
+    async def get_signal_identity() -> Identity:
         """
         Return identity and mode information for this gateway.
 

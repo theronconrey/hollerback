@@ -214,5 +214,10 @@ class AcpClient:
             for s in resp.json().get("sessions", [])
         ]
 
+    async def session_exists(self, session_id: str) -> bool:
+        """Return True if the session is still live in goosed."""
+        sessions = await self.list_sessions()
+        return any(s.id == session_id for s in sessions)
+
     async def close(self) -> None:
         await self._client.aclose()
