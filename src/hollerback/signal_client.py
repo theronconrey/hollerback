@@ -17,10 +17,6 @@ from typing import AsyncIterator
 
 import httpx
 
-SIGNAL_CLI_BASE = "http://127.0.0.1:8080"
-SIGNAL_CLI_RPC = f"{SIGNAL_CLI_BASE}/api/v1/rpc"
-SIGNAL_CLI_EVENTS = f"{SIGNAL_CLI_BASE}/api/v1/events"
-
 log = logging.getLogger(__name__)
 
 
@@ -32,9 +28,15 @@ class IncomingMessage:
 
 
 class SignalClient:
-    def __init__(self, account: str):
-        """account: the Signal phone number this gateway is registered as."""
+    def __init__(self, account: str, host: str = "127.0.0.1", port: int = 8080):
+        """
+        account: the Signal phone number this gateway is registered as.
+        host:    host the signal-cli HTTP daemon is listening on (default 127.0.0.1).
+        port:    port the signal-cli HTTP daemon is listening on (default 8080).
+        """
         self._account = account
+        self._rpc_url = f"http://{host}:{port}/api/v1/rpc"
+        self._events_url = f"http://{host}:{port}/api/v1/events"
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=None))
         self._rpc_id = 0
         self.supports_edit: bool | None = None
@@ -51,7 +53,7 @@ class SignalClient:
             "params": params,
         }
         resp = await self._client.post(
-            SIGNAL_CLI_RPC,
+            self._rpc_url,
             content=json.dumps(payload),
             headers={"Content-Type": "application/json"},
         )
@@ -137,7 +139,7 @@ class SignalClient:
         Filters to only text messages (dataMessage with non-empty message body).
         Skips receipts, typing indicators, and other envelope types.
         """
-        async with self._client.stream("GET", SIGNAL_CLI_EVENTS) as resp:
+        async with self._client.stream("GET", self._events_url) as resp:
             resp.raise_for_status()
             event_type = None
             lines = resp.aiter_lines().__aiter__()

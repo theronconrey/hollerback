@@ -205,7 +205,7 @@ hollerback accepts connections from any MCP client. Auth is a Bearer token; each
 
 **Claude CLI:**
 ```bash
-claude mcp add hollerback http://127.0.0.1:7322/mcp \
+claude mcp add --transport http hollerback http://127.0.0.1:7322/mcp \
   --header "Authorization: Bearer $(cat ~/.config/hollerback/agent-keys/default.key)"
 ```
 
