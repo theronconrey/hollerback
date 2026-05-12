@@ -21,6 +21,8 @@ _SHARE = Path.home() / ".local" / "share" / "hollerback"
 @dataclass
 class DaemonConfig:
     account: str = ""
+    signal_cli_host: str = "127.0.0.1"
+    signal_cli_port: int = 8080
 
 
 @dataclass
@@ -125,7 +127,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         agents = []
 
     return Config(
-        daemon=DaemonConfig(account=d.get("account", "")),
+        daemon=DaemonConfig(
+            account=d.get("account", ""),
+            signal_cli_host=d.get("signal_cli_host", "127.0.0.1"),
+            signal_cli_port=int(d.get("signal_cli_port", 8080)),
+        ),
         acp=AcpConfig(
             enabled=a.get("enabled", True),
             url=a.get("url"),
@@ -169,7 +175,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
 def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     raw = {
-        "daemon": {"account": config.daemon.account},
+        "daemon": {
+            "account": config.daemon.account,
+            "signal_cli_host": config.daemon.signal_cli_host,
+            "signal_cli_port": config.daemon.signal_cli_port,
+        },
         "acp": {
             "enabled": config.acp.enabled,
             "url": config.acp.url,

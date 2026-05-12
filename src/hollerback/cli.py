@@ -105,6 +105,8 @@ def start(ctx, account, detach, log_level):
         mcp_style_prompt=cfg.signal.style_prompt,
         signal_provider=cfg.signal.provider,
         signal_model=cfg.signal.model,
+        signal_cli_host=cfg.daemon.signal_cli_host,
+        signal_cli_port=cfg.daemon.signal_cli_port,
     )
 
     loop = asyncio.new_event_loop()
@@ -255,16 +257,23 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
     check("signal-cli binary found", bool(cli_bin),
           cli_bin or "sudo dnf install signal-cli")
 
-    # 3. signal-cli daemon reachable
+    # 3. signal-cli address
+    signal_cli_host = cfg.daemon.signal_cli_host
+    signal_cli_port = cfg.daemon.signal_cli_port
+    check("signal-cli address", True, f"{signal_cli_host}:{signal_cli_port}")
+
+    # 4. signal-cli daemon reachable
+    import socket
     try:
-        resp = httpx.get("http://127.0.0.1:8080/api/v1/rpc", timeout=3)
+        with socket.create_connection((signal_cli_host, signal_cli_port), timeout=3):
+            pass
         check("signal-cli daemon reachable", True)
-    except Exception:
+    except OSError:
         check("signal-cli daemon reachable", False,
-              "signal-cli --account <number> daemon --http 127.0.0.1:8080\n"
+              f"signal-cli --account <number> daemon --http {signal_cli_host}:{signal_cli_port}\n"
               "  or: systemctl --user enable --now signal-cli@+1XXXXXXXXXX")
 
-    # 4. Java 21+
+    # 5. Java 21+
     java = shutil.which("java")
     if java:
         try:
@@ -281,29 +290,29 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
     else:
         check("Java 21+", False, "sudo dnf install java-21-openjdk")
 
-    # 5. Signal account configured
+    # 6. Signal account configured
     acct = cfg.daemon.account
     check("Signal account configured", bool(acct),
           acct or "set daemon.account in config")
 
-    # 6. SSE stream opens
+    # 7. SSE stream opens
     try:
         import httpx as _httpx
         with _httpx.Client(timeout=5) as c:
-            with c.stream("GET", "http://127.0.0.1:8080/api/v1/events") as r:
+            with c.stream("GET", f"http://{signal_cli_host}:{signal_cli_port}/api/v1/events") as r:
                 ok = r.status_code == 200
         check("Signal SSE stream opens", ok)
     except Exception:
         check("Signal SSE stream opens", False,
               "signal-cli daemon must be running")
 
-    # 7. goosed binary (warning — not a hard fail)
+    # 8. goosed binary (warning — not a hard fail)
     goosed_bin = shutil.which("goosed") or shutil.which("goose")
     check("goose/goosed binary found (optional)",
           bool(goosed_bin),
           goosed_bin or "not found — install Goose Desktop or goose CLI")
 
-    # 8. goosed reachable
+    # 9. goosed reachable
     try:
         from .goosed_client import discover_goosed
         gcfg = discover_goosed()
@@ -314,7 +323,7 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
               "start Goose Desktop or run goosed manually")
         goosed_cfg = None
 
-    # 9. ACP initialize
+    # 10. ACP initialize
     if goosed_cfg:
         try:
             from .acp_client import AcpClient
@@ -330,7 +339,7 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
     else:
         check("ACP initialize", False, "skipped (goosed not reachable)")
 
-    # 10. Test session create
+    # 11. Test session create
     if goosed_cfg:
         try:
             from .acp_client import AcpClient
@@ -347,17 +356,17 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
     else:
         check("Test session create", False, "skipped (goosed not reachable)")
 
-    # 11. Metadata (goosed v1.30.0 doesn't support it — note limitation)
+    # 12. Metadata (goosed v1.30.0 doesn't support it — note limitation)
     check("Session metadata (display_name)",
           False,
           "goosed v1.30.0 lacks metadata field — upstream issue pending")
 
-    # 12. systemd unit installed
+    # 13. systemd unit installed
     unit = Path.home() / ".config" / "systemd" / "user" / "hollerback.service"
     check("systemd unit installed", unit.exists(),
           str(unit) if unit.exists() else "run: hollerback start --detach")
 
-    # 13. systemd unit active
+    # 14. systemd unit active
     result = subprocess.run(
         ["systemctl", "--user", "is-active", "hollerback"],
         capture_output=True, text=True
@@ -366,7 +375,7 @@ def _run_doctor(config_path: Path) -> list[tuple[str, bool, str]]:
     check("systemd unit active", active,
           "" if active else "run: hollerback start --detach")
 
-    # 14. home_conversation in allowed_users
+    # 15. home_conversation in allowed_users
     hc = cfg.home_conversation
     if hc:
         in_list = (
@@ -538,6 +547,10 @@ def setup(ctx):
     # Signal account
     console.print("\n[bold]Signal account[/bold]")
     account = click.prompt("Signal phone number (E.164, e.g. +16125551234)")
+    from .config import DaemonConfig as _DaemonDefaults
+    _dd = _DaemonDefaults()
+    signal_cli_host = click.prompt("signal-cli daemon host", default=_dd.signal_cli_host)
+    signal_cli_port = click.prompt("signal-cli daemon port", default=_dd.signal_cli_port, type=int)
 
     # Access control
     console.print("\n[bold]Access control[/bold]")
@@ -564,6 +577,8 @@ def setup(ctx):
     import secrets
     cfg = Config()
     cfg.daemon.account = account
+    cfg.daemon.signal_cli_host = signal_cli_host
+    cfg.daemon.signal_cli_port = signal_cli_port
     cfg.access.dm_policy = policy
     cfg.access.allowed_users = allowed
     cfg.home_conversation = home
@@ -586,7 +601,7 @@ def setup(ctx):
     console.print("\n[bold]Testing connections...[/bold]")
     try:
         import httpx
-        httpx.get("http://127.0.0.1:8080/api/v1/rpc", timeout=3)
+        httpx.get(f"http://{cfg.daemon.signal_cli_host}:{cfg.daemon.signal_cli_port}/api/v1/rpc", timeout=3)
         console.print("[green]✓[/green] signal-cli daemon reachable")
     except Exception:
         console.print("[yellow]⚠[/yellow] signal-cli daemon not running — "

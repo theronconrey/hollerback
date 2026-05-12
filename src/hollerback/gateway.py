@@ -52,6 +52,8 @@ class Gateway:
         signal_provider: str | None = None,
         signal_model: str | None = None,
         acp_enabled: bool = True,
+        signal_cli_host: str = "127.0.0.1",
+        signal_cli_port: int = 8080,
     ):
         self._signal_account = signal_account
         self._session_map_path = session_map_path
@@ -82,6 +84,8 @@ class Gateway:
         self._signal_provider = signal_provider
         self._signal_model = signal_model
         self._acp_enabled = acp_enabled
+        self._signal_cli_host = signal_cli_host
+        self._signal_cli_port = signal_cli_port
 
         self._tasks: set[asyncio.Task] = set()
         self._accepting = True
@@ -89,7 +93,7 @@ class Gateway:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self):
-        self._signal = SignalClient(self._signal_account)
+        self._signal = SignalClient(self._signal_account, host=self._signal_cli_host, port=self._signal_cli_port)
         self._sessions = await SessionMap.load(self._session_map_path)
 
         if self._acp_enabled:
